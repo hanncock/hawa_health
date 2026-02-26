@@ -6,6 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'day_info.dart';
+import 'tips_page.dart';
+import 'add_log_page.dart';
+import 'report_page.dart';
 
 class HawaDashboardPage extends StatefulWidget {
   const HawaDashboardPage({super.key});
@@ -415,6 +418,7 @@ class HexagonPeriodPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
+
 // Custom painter for light gray speech bubble
 class SpeechBubblePainter extends CustomPainter {
   @override
@@ -484,73 +488,6 @@ class SpeechBubblePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
-// Placeholder pages for navigation
-class TipsPage extends StatelessWidget {
-  const TipsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tips'),
-        backgroundColor: const Color(0xFF5C2A6B),
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Text(
-          'Tips Page\n\nHealth tips and advice will be displayed here.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ),
-    );
-  }
-}
-
-class AddLogPage extends StatelessWidget {
-  const AddLogPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Log'),
-        backgroundColor: const Color(0xFF5C2A6B),
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Text(
-          'Add Log Page\n\nLog your health data here.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ),
-    );
-  }
-}
-
-class ReportPage extends StatelessWidget {
-  const ReportPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reports'),
-        backgroundColor: const Color(0xFF5C2A6B),
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Text(
-          'Reports Page\n\nYour health reports and analytics will be displayed here.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ),
-    );
-  }
-}
-
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -560,6 +497,17 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   String? _profileImage;
+
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (image != null) {
+      setState(() {
+        _profileImage = image.path;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -823,15 +771,15 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    
-    if (pickedFile != null) {
-      setState(() {
-        _profileImage = pickedFile.path;
-      });
-    }
-  }
 }
+  // Future<void> _pickImage() async {
+  //   final picker = ImagePicker();
+  //   final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+  //
+  //   if (pickedFile != null) {
+  //     setState(() {
+  //       _profileImage = pickedFile.path;
+  //     });
+  //   }
+  // }
+// }

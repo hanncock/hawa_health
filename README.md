@@ -1,17 +1,18 @@
 # hawa_health
 
-A new Flutter project.
+A  Flutter project.
 
 ## Getting Started
+1. Install flutter version 3.35.5
 
-This project is a starting point for a Flutter application.
+2. In the file directory run "flutter clean && flutter pub get"
 
-A few resources to get you started if this is your first Flutter project:
+3. Once all the packages have been fetched 
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+run the app like other android apps
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-# hawa_health
+
+**--other requirements_not necessary--**
+android studio
+virtual emulator
+**------**
