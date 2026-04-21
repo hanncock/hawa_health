@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'package:intl/intl.dart';
 import 'day_info.dart';
 import 'tips_page.dart';
 import 'add_log_page.dart';
@@ -126,7 +127,7 @@ class _HawaDashboardPageState extends State<HawaDashboardPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "Today, January 14",
+                      "Today, ${DateFormat.MMMM().format(DateTime.now())} ${DateTime.now().day}",
                       style: GoogleFonts.poppins(
                         color: Colors.grey[800],
                         fontSize: 14,
@@ -474,7 +475,7 @@ class SpeechBubblePainter extends CustomPainter {
           ),
         ],
       ),
-      textDirection: TextDirection.ltr,
+      // textDirection: TextDirection.ltr,
     );
     
     textPainter.layout();
