@@ -1,120 +1,103 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+
+import 'design/hawa_components.dart';
+import 'design/hawa_design_system.dart';
 
 class DayInfoPage extends StatefulWidget {
   final DateTime selectedDate;
-  
-  const DayInfoPage({
-    super.key,
-    required this.selectedDate,
-  });
+
+  const DayInfoPage({super.key, required this.selectedDate});
 
   @override
   State<DayInfoPage> createState() => _DayInfoPageState();
 }
 
 class _DayInfoPageState extends State<DayInfoPage> {
-  int _selectedTabIndex = 2; // Timelines tab is active by default
+  int _selectedTabIndex = 2;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: MediaQuery.of(context).size.height * 0.88,
       decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
+        color: HawaColors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(HawaRadius.large)),
       ),
       child: Column(
         children: [
-          // Handle bar
           Container(
             width: 40,
             height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
+              color: HawaColors.ink12,
+              borderRadius: BorderRadius.circular(HawaRadius.pill),
             ),
           ),
-          
-          // Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.menu, color: Colors.black),
+                  icon: const Icon(Icons.close, color: HawaColors.ink),
                 ),
                 Expanded(
                   child: Text(
-                    'Report',
+                    'Day details',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+                    style: HawaTypography.body(size: 18, weight: FontWeight.w700),
                   ),
                 ),
                 IconButton(
                   onPressed: () {},
-                  icon: const Icon(Icons.upload, color: Colors.black),
+                  icon: const Icon(Icons.ios_share_outlined, color: HawaColors.ink),
                 ),
               ],
             ),
           ),
-          
-          // Navigation Tabs
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                _buildTab('Logs', 0),
+                _tab('Logs', 0),
                 const SizedBox(width: 8),
-                _buildTab('Cycles', 1),
+                _tab('Cycles', 1),
                 const SizedBox(width: 8),
-                _buildTab('Timelines', 2),
+                _tab('Timeline', 2),
               ],
             ),
           ),
-          
-          const SizedBox(height: 20),
-          
-          // Date Filter
+          const SizedBox(height: 16),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
                 Text(
-                  '${_getMonthName(widget.selectedDate.month)}, ${widget.selectedDate.year}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
+                  DateFormat.yMMMM().format(widget.selectedDate),
+                  style: HawaTypography.body(size: 16, weight: FontWeight.w700),
                 ),
-                const SizedBox(width: 8),
-                const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                const SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down, color: HawaColors.ink60, size: 20),
               ],
             ),
           ),
-          
-          const SizedBox(height: 20),
-          
-          // Daily Log Entries
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: Align(alignment: Alignment.centerLeft, child: HawaPrivacyBadge()),
+          ),
+          const SizedBox(height: 12),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               children: [
-                _buildDailyLogEntry(widget.selectedDate),
-                const SizedBox(height: 16),
-                _buildDailyLogEntry(widget.selectedDate.add(const Duration(days: 1))),
-                const SizedBox(height: 16),
-                _buildDailyLogEntry(widget.selectedDate.add(const Duration(days: 2))),
+                _logEntry(widget.selectedDate),
+                const SizedBox(height: 12),
+                _logEntry(widget.selectedDate.add(const Duration(days: 1))),
+                const SizedBox(height: 12),
+                _logEntry(widget.selectedDate.add(const Duration(days: 2))),
               ],
             ),
           ),
@@ -123,27 +106,26 @@ class _DayInfoPageState extends State<DayInfoPage> {
     );
   }
 
-  Widget _buildTab(String title, int index) {
-    final isSelected = _selectedTabIndex == index;
+  Widget _tab(String title, int index) {
+    final selected = _selectedTabIndex == index;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedTabIndex = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: HawaCurves.smooth,
+          padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF5C2A6B) : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected ? const Color(0xFF5C2A6B) : Colors.grey[300]!,
-            ),
+            color: selected ? HawaColors.primary : HawaColors.creamDark,
+            borderRadius: BorderRadius.circular(HawaRadius.pill),
           ),
           child: Text(
             title,
             textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.white : Colors.grey[600],
+            style: HawaTypography.body(
+              size: 13,
+              weight: FontWeight.w600,
+              color: selected ? HawaColors.white : HawaColors.ink60,
             ),
           ),
         ),
@@ -151,88 +133,41 @@ class _DayInfoPageState extends State<DayInfoPage> {
     );
   }
 
-  Widget _buildDailyLogEntry(DateTime date) {
-    return Container(
+  Widget _logEntry(DateTime date) {
+    return HawaCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Date Column
           Column(
             children: [
-              Text(
-                date.day.toString().padLeft(2, '0'),
-                style: GoogleFonts.poppins(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-              Text(
-                _getMonthAbbr(date.month),
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[600],
-                ),
-              ),
-              Text(
-                date.year.toString(),
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 8),
+              Text('${date.day}'.padLeft(2, '0'), style: HawaTypography.body(size: 24, weight: FontWeight.w700)),
+              Text(DateFormat.MMM().format(date), style: HawaTypography.bodySecondary(size: 11)),
+              Text('${date.year}', style: HawaTypography.bodySecondary(size: 11)),
+              const SizedBox(height: 10),
               Container(
-                width: 60,
-                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF5C2A6B),
-                  borderRadius: BorderRadius.circular(14),
+                  color: HawaColors.primary,
+                  borderRadius: BorderRadius.circular(HawaRadius.pill),
                 ),
-                child: Center(
-                  child: Text(
-                    '+Add',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+                child: Text('+ Add', style: HawaTypography.body(size: 10, weight: FontWeight.w600, color: HawaColors.white)),
               ),
             ],
           ),
-          
-          const SizedBox(width: 20),
-          
-          // Details Column
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHealthMetric('Flow', Icons.water_drop, Colors.pink),
+                _metric(Icons.water_drop_outlined, 'Flow', HawaColors.accent),
                 const SizedBox(height: 8),
-                _buildHealthMetric('Intercourse', Icons.favorite, Colors.purple),
+                _metric(Icons.favorite_border, 'Intercourse', HawaColors.secondary),
                 const SizedBox(height: 8),
-                _buildHealthMetric('Moods', Icons.psychology, Colors.pink),
+                _metric(Icons.psychology_outlined, 'Mood', HawaColors.accent),
                 const SizedBox(height: 8),
-                _buildHealthMetricWithValue('Weight', '43 kg'),
+                _valueRow('Weight', '43 kg'),
                 const SizedBox(height: 8),
-                _buildHealthMetricWithValue('Temperature', '98° F'),
+                _valueRow('Temperature', '98° F'),
               ],
             ),
           ),
@@ -241,74 +176,32 @@ class _DayInfoPageState extends State<DayInfoPage> {
     );
   }
 
-  Widget _buildHealthMetric(String label, IconData icon, Color color) {
+  Widget _metric(IconData icon, String label, Color color) {
     return Row(
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(12),
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(HawaRadius.pill),
           ),
-          child: Icon(
-            icon,
-            size: 16,
-            color: color,
-          ),
+          child: Icon(icon, size: 15, color: color),
         ),
-        const SizedBox(width: 12),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.black,
-          ),
-        ),
+        const SizedBox(width: 10),
+        Text(label, style: HawaTypography.body(size: 14, weight: FontWeight.w500)),
       ],
     );
   }
 
-  Widget _buildHealthMetricWithValue(String label, String value) {
+  Widget _valueRow(String label, String value) {
     return Row(
       children: [
-        const SizedBox(width: 24), // Space for icon alignment
-        const SizedBox(width: 12),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.black,
-          ),
-        ),
+        const SizedBox(width: 38),
+        Text(label, style: HawaTypography.body(size: 14)),
         const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.black,
-          ),
-        ),
+        Text(value, style: HawaTypography.body(size: 14, weight: FontWeight.w700)),
       ],
     );
-  }
-
-  String _getMonthName(int month) {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return months[month - 1];
-  }
-
-  String _getMonthAbbr(int month) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return months[month - 1];
   }
 }

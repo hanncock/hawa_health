@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'Dash.dart';
+import 'api/hawa_api.dart';
+import 'design/hawa_components.dart';
+import 'design/hawa_design_system.dart';
+import 'services/session_service.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -11,9 +15,10 @@ class OnboardingPage extends StatefulWidget {
 
 class _OnboardingPageState extends State<OnboardingPage> {
   int _currentStep = 0;
+  bool _submitting = false;
   DateTime? _dateOfBirth;
   DateTime? _lastMenstrualPeriod;
-  String? _periodFrequency; // 'regular' or 'irregular'
+  String? _periodFrequency;
   final PageController _pageController = PageController();
 
   @override
@@ -25,13 +30,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5E9FF), // Light Deep Plum tint
+      backgroundColor: HawaColors.cream,
       body: SafeArea(
         child: Column(
           children: [
-            // Progress Indicator
-            _buildProgressIndicator(),
-            
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: HawaProgressBar(current: _currentStep, total: 3),
+            ),
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -49,687 +55,426 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 
-  Widget _buildProgressIndicator() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-      child: Row(
-        children: List.generate(3, (index) {
-          return Expanded(
+  Widget _buildStepShell({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget content,
+    required List<Widget> actions,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 32),
+          Center(
             child: Container(
-              height: 4,
-              margin: EdgeInsets.only(right: index < 2 ? 8 : 0),
+              width: 72,
+              height: 72,
               decoration: BoxDecoration(
-                color: index <= _currentStep
-                    ? const Color(0xFF5C2A6B) // Deep Plum
-                    : Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
+                color: HawaColors.secondary.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, size: 34, color: HawaColors.primary),
             ),
-          );
-        }),
+          ),
+          const SizedBox(height: 32),
+          Text(title, style: HawaTypography.display(title, size: 28)),
+          const SizedBox(height: 10),
+          Text(subtitle, style: HawaTypography.bodySecondary(size: 14)),
+          const SizedBox(height: 28),
+          content,
+          const Spacer(),
+          ...actions,
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }
 
   Widget _buildDobScreen() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Spacer(),
-          
-          // Icon
-          Center(
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5C2A6B).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.cake_outlined,
-                size: 40,
-                color: Color(0xFF5C2A6B),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 40),
-          
-          Text(
-            "When were you born?",
-            style: GoogleFonts.poppins(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF5C2A6B),
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          Text(
-            "We need your date of birth to accurately calculate your cycle and provide personalized insights.",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-          
-          const Spacer(),
-          
-          // Date Picker Button
-          GestureDetector(
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: DateTime.now().subtract(const Duration(days: 365 * 25)),
-                firstDate: DateTime(1950),
-                lastDate: DateTime.now(),
-                builder: (context, child) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: const ColorScheme.light(
-                        primary: Color(0xFF5C2A6B), // Deep Plum
-                        onPrimary: Colors.white,
-                      ),
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (picked != null) {
-                setState(() {
-                  _dateOfBirth = picked;
-                });
-              }
-            },
-            child: Container(
-              width: double.infinity,
-              height: 60,
-              decoration: BoxDecoration(
-                color: _dateOfBirth != null
-                    ? const Color(0xFF5C2A6B)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _dateOfBirth != null
-                      ? const Color(0xFF5C2A6B)
-                      : Colors.grey[300]!,
-                  width: 2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  _dateOfBirth != null
-                      ? "${_dateOfBirth!.day}/${_dateOfBirth!.month}/${_dateOfBirth!.year}"
-                      : "Tap to select date",
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: _dateOfBirth != null
-                        ? Colors.white
-                        : Colors.grey[600],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Next Button
-          GestureDetector(
-            onTap: _dateOfBirth != null ? _nextStep : null,
-            child: Container(
-              width: double.infinity,
-              height: 52,
-              decoration: BoxDecoration(
-                color: _dateOfBirth != null
-                    ? const Color(0xFF5C2A6B)
-                    : Colors.grey[300],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  "Next",
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: _dateOfBirth != null
-                        ? Colors.white
-                        : Colors.grey[600],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-        ],
+    return _buildStepShell(
+      icon: Icons.cake_outlined,
+      title: 'When were you born?',
+      subtitle: 'We use this to personalize your cycle insights — never shared without consent.',
+      content: _DatePickerTile(
+        value: _dateOfBirth,
+        placeholder: 'Select your date of birth',
+        onTap: () => _pickDate(
+          initial: DateTime.now().subtract(const Duration(days: 365 * 25)),
+          first: DateTime(1950),
+          last: DateTime.now(),
+          onPicked: (d) => setState(() => _dateOfBirth = d),
+        ),
       ),
+      actions: [
+        HawaPrimaryButton(
+          label: 'Continue',
+          enabled: _dateOfBirth != null,
+          onPressed: _nextStep,
+        ),
+      ],
     );
   }
 
   Widget _buildLmpScreen() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Spacer(),
-          
-          // Icon
-          Center(
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5C2A6B).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.water_drop_outlined,
-                size: 40,
-                color: Color(0xFF5C2A6B),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 40),
-          
-          Text(
-            "When was your last period?",
-            style: GoogleFonts.poppins(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF5C2A6B),
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          Text(
-            "This helps us track your cycle and predict your next period more accurately.",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-          
-          const Spacer(),
-          
-          // Date Picker Button
-          GestureDetector(
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: DateTime.now(),
-                firstDate: DateTime.now().subtract(const Duration(days: 90)),
-                lastDate: DateTime.now(),
-                builder: (context, child) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: const ColorScheme.light(
-                        primary: Color(0xFF5C2A6B), // Deep Plum
-                        onPrimary: Colors.white,
-                      ),
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (picked != null) {
-                setState(() {
-                  _lastMenstrualPeriod = picked;
-                });
-              }
-            },
-            child: Container(
-              width: double.infinity,
-              height: 60,
-              decoration: BoxDecoration(
-                color: _lastMenstrualPeriod != null
-                    ? const Color(0xFF5C2A6B)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _lastMenstrualPeriod != null
-                      ? const Color(0xFF5C2A6B)
-                      : Colors.grey[300]!,
-                  width: 2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  _lastMenstrualPeriod != null
-                      ? "${_lastMenstrualPeriod!.day}/${_lastMenstrualPeriod!.month}/${_lastMenstrualPeriod!.year}"
-                      : "Tap to select date",
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: _lastMenstrualPeriod != null
-                        ? Colors.white
-                        : Colors.grey[600],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Back & Next Buttons
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: _previousStep,
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF5C2A6B),
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        "Back",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF5C2A6B),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: GestureDetector(
-                  onTap: _lastMenstrualPeriod != null ? _nextStep : null,
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _lastMenstrualPeriod != null
-                          ? const Color(0xFF5C2A6B)
-                          : Colors.grey[300],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        "Next",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: _lastMenstrualPeriod != null
-                              ? Colors.white
-                              : Colors.grey[600],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-        ],
+    return _buildStepShell(
+      icon: Icons.water_drop_outlined,
+      title: 'Last period start?',
+      subtitle: 'This helps us predict your next cycle with greater accuracy.',
+      content: _DatePickerTile(
+        value: _lastMenstrualPeriod,
+        placeholder: 'Select last period date',
+        onTap: () => _pickDate(
+          initial: DateTime.now(),
+          first: DateTime.now().subtract(const Duration(days: 90)),
+          last: DateTime.now(),
+          onPicked: (d) => setState(() => _lastMenstrualPeriod = d),
+        ),
       ),
+      actions: [
+        Row(
+          children: [
+            Expanded(child: HawaSecondaryButton(label: 'Back', onPressed: _previousStep)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: HawaPrimaryButton(
+                label: 'Continue',
+                enabled: _lastMenstrualPeriod != null,
+                onPressed: _nextStep,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildFrequencyScreen() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return _buildStepShell(
+      icon: Icons.calendar_today_outlined,
+      title: 'How regular is your cycle?',
+      subtitle: 'Choose the option that best describes your experience.',
+      content: Column(
         children: [
-          const Spacer(),
-          
-          // Icon
-          Center(
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5C2A6B).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.calendar_today_outlined,
-                size: 40,
-                color: Color(0xFF5C2A6B),
-              ),
-            ),
+          _FrequencyOption(
+            title: 'Regular',
+            subtitle: 'Consistent intervals each month',
+            icon: Icons.check_circle_outline,
+            selected: _periodFrequency == 'regular',
+            onTap: () => setState(() => _periodFrequency = 'regular'),
           ),
-          
-          const SizedBox(height: 40),
-          
-          Text(
-            "How regular is your period?",
-            style: GoogleFonts.poppins(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF5C2A6B),
-            ),
-          ),
-          
           const SizedBox(height: 12),
-          
-          Text(
-            "This helps us customize your cycle predictions and health insights.",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
+          _FrequencyOption(
+            title: 'Irregular',
+            subtitle: 'Cycles vary in length or timing',
+            icon: Icons.help_outline,
+            selected: _periodFrequency == 'irregular',
+            onTap: () => setState(() => _periodFrequency = 'irregular'),
           ),
-          
-          const Spacer(),
-          
-          // Regular Option
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _periodFrequency = 'regular';
-              });
-            },
-            child: Container(
-              width: double.infinity,
-              height: 70,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: _periodFrequency == 'regular'
-                    ? const Color(0xFF5C2A6B)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _periodFrequency == 'regular'
-                      ? const Color(0xFF5C2A6B)
-                      : Colors.grey[300]!,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 20),
-                  Icon(
-                    Icons.check_circle,
-                    color: _periodFrequency == 'regular'
-                        ? Colors.white
-                        : Colors.grey[400],
-                    size: 24,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Regular",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: _periodFrequency == 'regular'
-                                ? Colors.white
-                                : Colors.black,
-                          ),
-                        ),
-                        Text(
-                          "My cycles come at consistent intervals",
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: _periodFrequency == 'regular'
-                                ? Colors.white.withOpacity(0.8)
-                                : Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Irregular Option
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _periodFrequency = 'irregular';
-              });
-            },
-            child: Container(
-              width: double.infinity,
-              height: 70,
-              margin: const EdgeInsets.only(bottom: 40),
-              decoration: BoxDecoration(
-                color: _periodFrequency == 'irregular'
-                    ? const Color(0xFF5C2A6B)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _periodFrequency == 'irregular'
-                      ? const Color(0xFF5C2A6B)
-                      : Colors.grey[300]!,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 20),
-                  Icon(
-                    Icons.help_outline,
-                    color: _periodFrequency == 'irregular'
-                        ? Colors.white
-                        : Colors.grey[400],
-                    size: 24,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Irregular",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: _periodFrequency == 'irregular'
-                                ? Colors.white
-                                : Colors.black,
-                          ),
-                        ),
-                        Text(
-                          "My cycles vary in length or timing",
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: _periodFrequency == 'irregular'
-                                ? Colors.white.withOpacity(0.8)
-                                : Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Back & Complete Buttons
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: _previousStep,
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF5C2A6B),
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        "Back",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF5C2A6B),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: GestureDetector(
-                  onTap: _periodFrequency != null ? _completeOnboarding : null,
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _periodFrequency != null
-                          ? const Color(0xFF5C2A6B)
-                          : Colors.grey[300],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        "Complete",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: _periodFrequency != null
-                              ? Colors.white
-                              : Colors.grey[600],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
         ],
       ),
+      actions: [
+        Row(
+          children: [
+            Expanded(child: HawaSecondaryButton(label: 'Back', onPressed: _previousStep)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: HawaPrimaryButton(
+                label: 'Complete',
+                enabled: _periodFrequency != null && !_submitting,
+                onPressed: _completeOnboarding,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
+  }
+
+  Future<void> _pickDate({
+    required DateTime initial,
+    required DateTime first,
+    required DateTime last,
+    required ValueChanged<DateTime> onPicked,
+  }) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      builder: (context, child) {
+        return Theme(data: buildHawaTheme(), child: child!);
+      },
+    );
+    if (picked != null) onPicked(picked);
   }
 
   void _nextStep() {
     if (_currentStep < 2) {
-      setState(() {
-        _currentStep++;
-      });
+      setState(() => _currentStep++);
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 350),
+        curve: HawaCurves.smooth,
       );
     }
   }
 
   void _previousStep() {
     if (_currentStep > 0) {
-      setState(() {
-        _currentStep--;
-      });
+      setState(() => _currentStep--);
       _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 350),
+        curve: HawaCurves.smooth,
       );
     }
   }
 
-  void _completeOnboarding() {
-    // Save onboarding data and navigate to dashboard
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => const OnboardingCompletePage(),
+  Future<void> _completeOnboarding() async {
+    if (_lastMenstrualPeriod == null || _periodFrequency == null) return;
+
+    setState(() => _submitting = true);
+    try {
+      final session = SessionService();
+      final username = await session.getUsername();
+      if (username == null) throw Exception('No active session');
+
+      final api = HawaApi();
+      const defaultPeriodLength = 5;
+      final endDate = _lastMenstrualPeriod!.add(const Duration(days: defaultPeriodLength - 1));
+
+      await api.createCycle(
+        username,
+        startDate: _lastMenstrualPeriod!,
+        endDate: endDate,
+        periodLength: defaultPeriodLength,
+        status: _periodFrequency,
+      );
+
+      try {
+        await api.predictForUser(username);
+      } catch (_) {
+        // Prediction may fail if insufficient cycle history.
+      }
+
+      await session.setOnboardingComplete(lastPeriodStart: _lastMenstrualPeriod);
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const OnboardingCompletePage(),
+          transitionsBuilder: (_, anim, __, child) {
+            return FadeTransition(
+              opacity: CurvedAnimation(parent: anim, curve: HawaCurves.smooth),
+              child: child,
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save onboarding: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+}
+
+class _DatePickerTile extends StatelessWidget {
+  const _DatePickerTile({
+    required this.value,
+    required this.placeholder,
+    required this.onTap,
+  });
+
+  final DateTime? value;
+  final String placeholder;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return HawaCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      color: value != null ? HawaColors.primary : HawaColors.white,
+      child: Row(
+        children: [
+          Icon(
+            Icons.event_outlined,
+            color: value != null ? HawaColors.white : HawaColors.primary,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              value != null
+                  ? '${value!.day}/${value!.month}/${value!.year}'
+                  : placeholder,
+              style: HawaTypography.body(
+                size: 16,
+                weight: FontWeight.w600,
+                color: value != null ? HawaColors.white : HawaColors.ink60,
+              ),
+            ),
+          ),
+          Icon(
+            Icons.chevron_right,
+            color: value != null ? HawaColors.white : HawaColors.ink60,
+          ),
+        ],
       ),
     );
   }
 }
 
-// Onboarding complete page - navigates to dashboard
-class OnboardingCompletePage extends StatelessWidget {
+class _FrequencyOption extends StatelessWidget {
+  const _FrequencyOption({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return HawaCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(18),
+      color: selected ? HawaColors.primary : HawaColors.white,
+      child: Row(
+        children: [
+          Icon(icon, color: selected ? HawaColors.white : HawaColors.secondary),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: HawaTypography.body(
+                    size: 16,
+                    weight: FontWeight.w700,
+                    color: selected ? HawaColors.white : HawaColors.ink,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: HawaTypography.body(
+                    size: 12,
+                    color: selected ? HawaColors.white.withValues(alpha: 0.85) : HawaColors.ink60,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class OnboardingCompletePage extends StatefulWidget {
   const OnboardingCompletePage({super.key});
+
+  @override
+  State<OnboardingCompletePage> createState() => _OnboardingCompletePageState();
+}
+
+class _OnboardingCompletePageState extends State<OnboardingCompletePage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _scale = CurvedAnimation(parent: _controller, curve: HawaCurves.spring);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF5C2A6B),
+      backgroundColor: HawaColors.primary,
       body: SafeArea(
-        child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_circle,
-                  size: 50,
-                  color: Colors.white,
+              ScaleTransition(
+                scale: _scale,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: HawaColors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check_rounded, size: 52, color: HawaColors.white),
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 28),
               Text(
-                'Welcome!',
-                style: GoogleFonts.poppins(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                'You\'re all set',
+                style: HawaTypography.display('You\'re all set', size: 34).copyWith(
+                  color: HawaColors.white,
                 ),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
-                'Your profile is all set up',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  color: Colors.white.withOpacity(0.9),
+                'Your personalized care journey begins now',
+                style: HawaTypography.body(
+                  size: 15,
+                  color: HawaColors.white.withValues(alpha: 0.9),
                 ),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 50),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (context) => const HawaDashboardPage(),
+              const SizedBox(height: 48),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const HawaDashboardPage()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HawaColors.white,
+                    foregroundColor: HawaColors.primary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(HawaRadius.pill),
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF5C2A6B),
-                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    textStyle: HawaTypography.body(size: 16, weight: FontWeight.w700, color: HawaColors.primary),
                   ),
+                  child: const Text('Get Started'),
                 ),
-                child: Text(
-                  'Get Started',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Privacy first — your data stays yours',
+                style: HawaTypography.body(
+                  size: 12,
+                  color: HawaColors.white.withValues(alpha: 0.75),
                 ),
               ),
             ],

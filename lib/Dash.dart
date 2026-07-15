@@ -1,15 +1,20 @@
 import 'dart:io';
-import 'dart:math';
-import 'dart:ui';
+
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:intl/intl.dart';
-import 'day_info.dart';
-import 'tips_page.dart';
+
 import 'add_log_page.dart';
+import 'api/hawa_api.dart';
+import 'api/models.dart';
+import 'day_info.dart';
+import 'design/hawa_components.dart';
+import 'design/hawa_design_system.dart';
+import 'login_page.dart';
 import 'report_page.dart';
+import 'services/auth_service.dart';
+import 'services/session_service.dart';
+import 'tips_page.dart';
 
 class HawaDashboardPage extends StatefulWidget {
   const HawaDashboardPage({super.key});
@@ -20,14 +25,94 @@ class HawaDashboardPage extends StatefulWidget {
 
 class _HawaDashboardPageState extends State<HawaDashboardPage> {
   int _selectedIndex = 0;
+  int _selectedChip = 0;
   DateTime _selectedDate = DateTime.now();
-  late ScrollController _scrollController;
+  late final ScrollController _scrollController;
+
+  final _api = HawaApi();
+  final _session = SessionService();
+
+  UserModel? _user;
+  bool _loading = true;
+  String? _error;
+
+  int? _periodDay;
+  String _fertilityLabel = 'Loading insights…';
+  String _periodEndsLabel = '';
+
+  static const _topics = [
+    'Fertility',
+    'Pregnancy',
+    'Perimenopause',
+    'Cycle',
+    'Wellness',
+  ];
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _loadDashboardData();
   }
+
+  Future<void> _loadDashboardData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final username = await _session.getUsername();
+      if (username == null) throw Exception('Not signed in');
+
+      final user = await _api.getUser(username);
+      PredictionModel? prediction;
+      try {
+        prediction = await _api.latestPrediction(username);
+      } catch (_) {
+        try {
+          prediction = await _api.predictForUser(username);
+        } catch (_) {}
+      }
+
+      final lastPeriod = await _session.getLastPeriodStart();
+      int? periodDay;
+      String fertility = 'Track your cycle for insights';
+      String endsLabel = '';
+
+      if (lastPeriod != null) {
+        final daysSince = DateTime.now().difference(
+          DateTime(lastPeriod.year, lastPeriod.month, lastPeriod.day),
+        ).inDays;
+        if (daysSince >= 0 && daysSince < (prediction?.predictedPeriodLength ?? 7)) {
+          periodDay = daysSince + 1;
+          final remaining = (prediction?.predictedPeriodLength ?? 5) - periodDay;
+          endsLabel = remaining > 0 ? 'Ends in ~$remaining days' : 'Period ending soon';
+        }
+      }
+
+      if (prediction != null) {
+        fertility = '${prediction.confidenceLevel} confidence · ${prediction.predictedCycleLength}d cycle';
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _periodDay = periodDay;
+        _fertilityLabel = fertility;
+        _periodEndsLabel = endsLabel;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  String get _displayName => _user?.username ?? 'there';
 
   @override
   void dispose() {
@@ -36,61 +121,42 @@ class _HawaDashboardPageState extends State<HawaDashboardPage> {
   }
 
   List<DateTime> _generateDateList() {
-    List<DateTime> dates = [];
-    DateTime startDate = DateTime.now().subtract(const Duration(days: 30));
-    for (int i = 0; i < 60; i++) {
-      dates.add(startDate.add(Duration(days: i)));
-    }
-    return dates;
-  }
-
-  String _formatDate(DateTime date) {
-    List<String> weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return weekdays[date.weekday - 1];
-  }
-
-  String _formatDay(DateTime date) {
-    return date.day.toString();
-  }
-
-  bool _isToday(DateTime date) {
-    DateTime now = DateTime.now();
-    return date.year == now.year && date.month == now.month && date.day == now.day;
-  }
-
-  void _onDateSelected(DateTime date) {
-    setState(() {
-      _selectedDate = date;
-    });
+    final start = DateTime.now().subtract(const Duration(days: 30));
+    return List.generate(60, (i) => start.add(Duration(days: i)));
   }
 
   void _onBottomNavTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    
-    // Navigate to different pages based on index
+    setState(() => _selectedIndex = index);
+
     switch (index) {
       case 0:
-        // Already on main dashboard
         break;
       case 1:
-        // Navigate to Tips page
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const TipsPage()));
+        Navigator.push(context, _smoothRoute(const TipsPage()));
         break;
       case 2:
-        // Navigate to Add/Log page
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const AddLogPage()));
+        Navigator.push(context, _smoothRoute(const AddLogPage()));
         break;
       case 3:
-        // Navigate to Report page
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportPage()));
+        Navigator.push(context, _smoothRoute(const ReportPage()));
         break;
       case 4:
-        // Navigate to Profile page
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
+        Navigator.push(context, _smoothRoute(const ProfilePage()));
         break;
     }
+  }
+
+  PageRouteBuilder<T> _smoothRoute<T>(Widget page) {
+    return PageRouteBuilder<T>(
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, anim, __, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
+              .animate(CurvedAnimation(parent: anim, curve: HawaCurves.smooth)),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+    );
   }
 
   void _showDayInfoModal() {
@@ -105,388 +171,269 @@ class _HawaDashboardPageState extends State<HawaDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: HawaColors.cream,
+      floatingActionButton: HawaFab(
+        icon: Icons.water_drop_outlined,
+        onPressed: () => Navigator.push(context, _smoothRoute(const AddLogPage())),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: HawaColors.primary))
+            : _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Could not load dashboard', style: HawaTypography.body(weight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          Text(_error!, style: HawaTypography.bodySecondary(size: 13), textAlign: TextAlign.center),
+                          const SizedBox(height: 16),
+                          HawaPrimaryButton(label: 'Retry', onPressed: _loadDashboardData),
+                        ],
+                      ),
+                    ),
+                  )
+                : SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Section
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Smart health. Every woman. Every stage",
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xFF5C2A6B), // Deep Plum
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      '${greetingForTime()}, $_displayName',
+                      style: HawaTypography.display('${greetingForTime()}, $_displayName', size: 30),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Text(
-                      "Today, ${DateFormat.MMMM().format(DateTime.now())} ${DateTime.now().day}",
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[800],
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      'Your cycle today',
+                      style: HawaTypography.bodySecondary(size: 14),
                     ),
-                    const SizedBox(height: 20),
-                    // Dynamic Date Selector
-                    SizedBox(
-                      height: 80,
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _generateDateList().length,
-                        itemBuilder: (context, index) {
-                          final date = _generateDateList()[index];
-                          final isSelected = _isToday(date);
-                          final isCurrentSelected = _selectedDate.day == date.day && 
-                                                   _selectedDate.month == date.month && 
-                                                   _selectedDate.year == date.year;
-                          
-                          return GestureDetector(
-                            onTap: () {
-                              _onDateSelected(date);
-                              _showDayInfoModal();
-                            },
-                            child: Container(
-                              width: 50,
-                              height: 65,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                color: isCurrentSelected
-                                    ? const Color(0xFFF5E9FF) // Light plum tint
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isCurrentSelected
-                                      ? const Color(0xFF5C2A6B) // Deep Plum
-                                      : Colors.grey.shade300,
-                                ),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _formatDate(date),
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 13,
-                                      color: Colors.grey[700],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    _formatDay(date),
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: isCurrentSelected
-                                          ? const Color(0xFF5C2A6B) // Deep Plum
-                                          : Colors.black,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Period Hexagon Display Section
-                    GestureDetector(
-                      onTap: _showDayInfoModal,
-                      child: Container(
-                        width: 280,
-                        height: 280,
-                        child: Stack(
-                          alignment: Alignment.center,
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: HawaCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Background image from assets
-                            Image.asset(
-                              'assets/dashbg.png',
-                              width: 280,
-                              height: 280,
-                              fit: BoxFit.contain,
+                            Text('Period · Day ${_periodDay ?? '—'}', style: HawaTypography.body(size: 13, color: HawaColors.ink60)),
+                            const SizedBox(height: 6),
+                            Text(
+                              _fertilityLabel,
+                              style: HawaTypography.body(size: 18, weight: FontWeight.w700),
                             ),
-                            
-                            // Text content
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Period:",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: const Color(0xFF5C2A6B), // Deep Plum
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "Day 3",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 42,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFFFF5BAA), // Rose Magenta
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  "Medium Chance to getting pregnant",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w400,
-                                    color: const Color(0xFF5C2A6B), // Deep Plum
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                            const SizedBox(height: 4),
+                            Text(
+                              _periodEndsLabel.isNotEmpty ? _periodEndsLabel : 'Log symptoms for better predictions',
+                              style: HawaTypography.bodySecondary(size: 13),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Quick View Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Quick view",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
+                      GestureDetector(
+                        onTap: _showDayInfoModal,
+                        child: SizedBox(
+                          width: 88,
+                          height: 88,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Image.asset('assets/dashbg.png', fit: BoxFit.contain),
+                              Text(
+                                '${_periodDay ?? '—'}',
+                                style: HawaTypography.body(
+                                  size: 32,
+                                  weight: FontWeight.w700,
+                                  color: HawaColors.accent,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        Text(
-                          "Edit",
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: const Color(0xFF5C2A6B), // Deep Plum
-                          ),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _topics.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) {
+                    return HawaChip(
+                      label: _topics[i],
+                      selected: _selectedChip == i,
+                      onTap: () => setState(() => _selectedChip = i),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('This week', style: HawaTypography.body(size: 16, weight: FontWeight.w700)),
+                    Text(
+                      DateFormat.MMMd().format(DateTime.now()),
+                      style: HawaTypography.body(size: 13, color: HawaColors.primary, weight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 20),
-
-                    // Quick View Icons Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildQuickViewItem("Protected Sex", Icons.favorite_border),
-                        _buildQuickViewItem("Happy", Icons.emoji_emotions_outlined),
-                        _buildQuickViewItem("Drink Water", Icons.water_drop_outlined),
-                        _buildQuickViewItem("Very Heavy", Icons.bloodtype_outlined),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 76,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _generateDateList().length,
+                  itemBuilder: (context, index) {
+                    final date = _generateDateList()[index];
+                    final selected = _selectedDate.year == date.year &&
+                        _selectedDate.month == date.month &&
+                        _selectedDate.day == date.day;
+                    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() => _selectedDate = date);
+                        _showDayInfoModal();
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: HawaCurves.smooth,
+                        width: 52,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: selected ? HawaColors.primary : HawaColors.creamDark,
+                          borderRadius: BorderRadius.circular(HawaRadius.medium),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              weekdays[date.weekday - 1],
+                              style: HawaTypography.body(
+                                size: 11,
+                                color: selected ? HawaColors.white.withValues(alpha: 0.8) : HawaColors.ink60,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${date.day}',
+                              style: HawaTypography.body(
+                                size: 16,
+                                weight: FontWeight.w700,
+                                color: selected ? HawaColors.white : HawaColors.ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 28),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    HawaFeatureCard(
+                      number: '01',
+                      title: 'Track symptoms',
+                      subtitle: 'Log flow, mood & more daily',
+                      onTap: () => Navigator.push(context, _smoothRoute(const AddLogPage())),
+                    ),
+                    const SizedBox(height: 12),
+                    HawaFeatureCard(
+                      number: '02',
+                      title: 'Health insights',
+                      subtitle: 'Patterns across your cycles',
+                      onTap: () => Navigator.push(context, _smoothRoute(const ReportPage())),
+                    ),
+                    const SizedBox(height: 12),
+                    HawaFeatureCard(
+                      number: '03',
+                      title: 'Care tips',
+                      subtitle: 'Guidance for every stage',
+                      onTap: () => Navigator.push(context, _smoothRoute(const TipsPage())),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Quick view', style: HawaTypography.body(size: 16, weight: FontWeight.w700)),
+                    Text('Edit', style: HawaTypography.body(size: 13, color: HawaColors.primary, weight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _quickViewItem('Protected', Icons.favorite_border),
+                    _quickViewItem('Happy', Icons.emoji_emotions_outlined),
+                    _quickViewItem('Hydrated', Icons.water_drop_outlined),
+                    _quickViewItem('Heavy', Icons.bloodtype_outlined),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Center(child: HawaPrivacyBadge()),
+              const SizedBox(height: 88),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: CurvedNavigationBar(
-        index: _selectedIndex,
-        height: 60,
-        animationDuration: const Duration(milliseconds: 300),
-        buttonBackgroundColor: const Color(0xFF5C2A6B),
-        backgroundColor: Colors.transparent,
-        color: const Color(0xFF5C2A6B),
+      bottomNavigationBar: HawaBottomNav(
+        currentIndex: _selectedIndex,
         onTap: _onBottomNavTapped,
-        items: const [
-          Icon(Icons.home_outlined, size: 24, color: Colors.white),
-          Icon(Icons.lightbulb_outline, size: 24, color: Colors.white),
-          Icon(Icons.add, size: 28, color: Colors.white),
-          Icon(Icons.insert_chart_outlined, size: 24, color: Colors.white),
-          Icon(Icons.person_outline, size: 24, color: Colors.white),
-        ],
       ),
     );
   }
 
-  Widget _buildQuickViewItem(String label, IconData icon) {
+  Widget _quickViewItem(String label, IconData icon) {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
-          decoration: const BoxDecoration(
-            color: Color(0xFFF5E9FF), // Light Deep Plum tint
-            shape: BoxShape.circle,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: HawaColors.creamDark,
+            borderRadius: BorderRadius.circular(HawaRadius.pill),
           ),
-          child: Icon(icon, color: Color(0xFF5C2A6B), size: 24), // Deep Plum
+          child: Icon(icon, color: HawaColors.primary, size: 22),
         ),
         const SizedBox(height: 8),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            color: Colors.grey[700],
-          ),
-          textAlign: TextAlign.center,
-        ),
+        Text(label, style: HawaTypography.bodySecondary(size: 11), textAlign: TextAlign.center),
       ],
     );
   }
-}
-
-// Custom painter for hexagonal period display matching the image
-class HexagonPeriodPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.white,
-          const Color(0xFFFFF0F5), // Soft light pink
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..style = PaintingStyle.fill;
-
-    final borderPaint = Paint()
-      ..color = const Color(0xFFFF5BAA) // Rose Magenta border
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    final path = Path();
-    final centerX = size.width / 2;
-    final centerY = size.height / 2;
-    final radius = size.width / 2 - 30;
-
-    // Create hexagon points
-    final points = List.generate(6, (i) {
-      final angle = (i * 60.0) * (pi / 180.0);
-      return Offset(
-        centerX + radius * cos(angle),
-        centerY + radius * sin(angle),
-      );
-    });
-
-    // Create rounded hexagon path
-    for (int i = 0; i < points.length; i++) {
-      if (i == 0) {
-        path.moveTo(points[i].dx, points[i].dy);
-      } else {
-        path.lineTo(points[i].dx, points[i].dy);
-      }
-    }
-    path.close();
-
-    canvas.drawPath(path, paint);
-    canvas.drawPath(path, borderPaint);
-
-    // Add pink dot and line extending from bottom point
-    final dotPaint = Paint()
-      ..color = const Color(0xFFFF5BAA)
-      ..style = PaintingStyle.fill;
-
-    final linePaint = Paint()
-      ..color = const Color(0xFFFF5BAA)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    // Calculate bottom point (index 3 in the hexagon)
-    final bottomPoint = points[3];
-
-    // Draw extending line from bottom point
-    canvas.drawLine(
-      Offset(bottomPoint.dx, bottomPoint.dy + 5),
-      Offset(bottomPoint.dx + 25, bottomPoint.dy + 30),
-      linePaint,
-    );
-
-    // Draw small dot at the end of the line
-    canvas.drawCircle(
-      Offset(bottomPoint.dx + 25, bottomPoint.dy + 30),
-      3,
-      dotPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
-}
-
-
-// Custom painter for light gray speech bubble
-class SpeechBubblePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.grey[300]! // Light gray
-      ..style = PaintingStyle.fill;
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.1)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-
-    // Create rounded rectangular bubble with pointer
-    final path = Path();
-    
-    // Main bubble body
-    path.addRRect(RRect.fromLTRBR(
-      0, 0, size.width - 15, size.height - 8,
-      const Radius.circular(12),
-    ));
-    
-    // Pointer/tail pointing down and slightly right
-    path.moveTo(size.width - 15, size.height - 15);
-    path.lineTo(size.width - 3, size.height - 8);
-    path.lineTo(size.width - 15, size.height - 3);
-    path.close();
-
-    // Draw shadow first
-    canvas.drawPath(path, shadowPaint);
-    
-    // Draw main bubble
-    canvas.drawPath(path, paint);
-
-    // Add text content
-    final textPainter = TextPainter(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: "Will end in 4 days\n",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
-          TextSpan(
-            text: "Tuesday, 17 September",
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: Colors.black,
-            ),
-          ),
-        ],
-      ),
-      // textDirection: TextDirection.ltr,
-    );
-    
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(12, (size.height - textPainter.height) / 2),
-    );
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
 class ProfilePage extends StatefulWidget {
@@ -498,39 +445,68 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   String? _profileImage;
+  final _auth = AuthService();
+  final _session = SessionService();
+  UserModel? _user;
+  DateTime? _lastPeriod;
+  bool _loading = true;
 
-  Future<void> _pickImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    
-    if (image != null) {
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final user = await _session.loadUser();
+    final lastPeriod = await _session.getLastPeriodStart();
+    if (mounted) {
       setState(() {
-        _profileImage = image.path;
+        _user = user;
+        _lastPeriod = lastPeriod;
+        _loading = false;
       });
     }
+  }
+
+  Future<void> _logout() async {
+    await _auth.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (_) => false,
+    );
+  }
+
+  Future<void> _pickImage() async {
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image != null) setState(() => _profileImage = image.path);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
+      backgroundColor: HawaColors.cream,
+      appBar: AppBar(
+        title: Text('Profile', style: HawaTypography.body(size: 18, weight: FontWeight.w600)),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: HawaColors.primary))
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // Profile Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              color: Colors.white,
+            HawaCard(
               child: Column(
                 children: [
-                  const SizedBox(height: 40),
                   Stack(
                     children: [
                       Container(
-                        width: 120,
-                        height: 120,
+                        width: 110,
+                        height: 110,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF5C2A6B), width: 4),
+                          border: Border.all(color: HawaColors.secondary, width: 3),
                           image: _profileImage != null
                               ? DecorationImage(
                                   image: FileImage(File(_profileImage!)),
@@ -539,11 +515,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               : null,
                         ),
                         child: _profileImage == null
-                            ? const Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Color(0xFF5C2A6B),
-                              )
+                            ? const Icon(Icons.person_outline, size: 52, color: HawaColors.primary)
                             : null,
                       ),
                       Positioned(
@@ -552,168 +524,106 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: GestureDetector(
                           onTap: _pickImage,
                           child: Container(
-                            width: 36,
-                            height: 36,
+                            width: 34,
+                            height: 34,
                             decoration: BoxDecoration(
+                              color: HawaColors.accent,
                               shape: BoxShape.circle,
-                              color: const Color(0xFFFF6B9A),
-                              border: Border.all(color: Colors.white, width: 3),
+                              border: Border.all(color: HawaColors.white, width: 2),
                             ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 18,
-                              color: Colors.white,
-                            ),
+                            child: const Icon(Icons.camera_alt, size: 16, color: HawaColors.white),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Text(
-                    'Jane Doe',
-                    style: GoogleFonts.poppins(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+                    _user?.username ?? 'User',
+                    style: HawaTypography.display(_user?.username ?? 'User', size: 26, style: FontStyle.normal),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'jane.doe@example.com',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
+                  Text(_user?.email ?? '', style: HawaTypography.bodySecondary(size: 14)),
                 ],
               ),
             ),
-
-            // User Bio Section
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 20),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: HawaSectionTitle('Bio Data'),
+            ),
+            const SizedBox(height: 12),
+            _infoTile(Icons.cake_outlined, 'Age', '${_user?.age ?? '—'} years'),
+            const SizedBox(height: 10),
+            _infoTile(Icons.phone_outlined, 'Phone', _user?.phone ?? 'Not set'),
+            const SizedBox(height: 10),
+            _infoTile(
+              Icons.calendar_today_outlined,
+              'Last Period',
+              _lastPeriod != null ? DateFormat.yMMMd().format(_lastPeriod!) : 'Not set',
+            ),
+            const SizedBox(height: 24),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: HawaSectionTitle('Settings'),
+            ),
+            const SizedBox(height: 12),
+            HawaCard(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
                 children: [
-                  Text(
-                    'Bio Data',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF5C2A6B),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: HawaColors.secondary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(HawaRadius.small),
+                    ),
+                    child: const Icon(Icons.shield_outlined, color: HawaColors.primary, size: 20),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Privacy', style: HawaTypography.body(size: 15, weight: FontWeight.w600)),
+                        Text('End-to-end encrypted', style: HawaTypography.bodySecondary(size: 12)),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _buildInfoCard(
-                    icon: Icons.cake_outlined,
-                    label: 'Date of Birth',
-                    value: 'March 15, 1995',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoCard(
-                    icon: Icons.phone_outlined,
-                    label: 'Phone',
-                    value: '+1 (555) 123-4567',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoCard(
-                    icon: Icons.location_on_outlined,
-                    label: 'Location',
-                    value: 'New York, USA',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoCard(
-                    icon: Icons.calendar_today_outlined,
-                    label: 'Last Period',
-                    value: 'January 14, 2024',
-                  ),
-
-                  const SizedBox(height: 32),
-                  Text(
-                    'Settings',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF5C2A6B),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSettingCard(
-                    icon: Icons.dark_mode_outlined,
-                    label: 'Dark Mode',
-                    child: Switch(
-                      value: Theme.of(context).brightness == Brightness.dark,
-                      onChanged: (value) {
-                        // Will be handled by theme provider
-                      },
-                      activeColor: const Color(0xFF5C2A6B),
-                    ),
-                  ),
+                  Icon(Icons.chevron_right, color: HawaColors.ink60),
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            HawaSecondaryButton(label: 'Sign out', onPressed: _logout),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoCard({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Container(
+  Widget _infoTile(IconData icon, String label, String value) {
+    return HawaCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Row(
         children: [
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFF5C2A6B).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: HawaColors.secondary.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(HawaRadius.small),
             ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF5C2A6B),
-              size: 20,
-            ),
+            child: Icon(icon, color: HawaColors.primary, size: 20),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black,
-                  ),
-                ),
+                Text(label, style: HawaTypography.bodySecondary(size: 12)),
+                Text(value, style: HawaTypography.body(size: 15, weight: FontWeight.w600)),
               ],
             ),
           ),
@@ -721,66 +631,4 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
-  Widget _buildSettingCard({
-    required IconData icon,
-    required String label,
-    Widget? child,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFF5C2A6B).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF5C2A6B),
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.black,
-              ),
-            ),
-          ),
-          if (child != null) child,
-        ],
-      ),
-    );
-  }
 }
-  // Future<void> _pickImage() async {
-  //   final picker = ImagePicker();
-  //   final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-  //
-  //   if (pickedFile != null) {
-  //     setState(() {
-  //       _profileImage = pickedFile.path;
-  //     });
-  //   }
-  // }
-// }

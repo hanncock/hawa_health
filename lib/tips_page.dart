@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
+import 'design/hawa_components.dart';
+import 'design/hawa_design_system.dart';
 
 class TipsPage extends StatelessWidget {
   const TipsPage({super.key});
@@ -7,138 +9,104 @@ class TipsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: HawaColors.cream,
       appBar: AppBar(
-        title: Text(
-          'Health Tips',
-          style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: const Color(0xFF5C2A6B),
-        foregroundColor: Colors.white,
-        elevation: 0,
+        title: Text('Care tips', style: HawaTypography.body(size: 18, weight: FontWeight.w600)),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text(
+            'Guidance for every stage',
+            style: HawaTypography.display('Guidance for every stage', size: 26),
+          ),
+          const SizedBox(height: 6),
+          Text('Curated insights for your wellbeing', style: HawaTypography.bodySecondary(size: 14)),
+          const SizedBox(height: 24),
+          const HawaSectionTitle('Cycle Health'),
+          const SizedBox(height: 12),
+          _tip(
+            '01',
+            'Stay Hydrated',
+            'Drinking water helps reduce bloating and cramps during your period.',
+            Icons.water_drop_outlined,
+          ),
+          _tip(
+            '02',
+            'Track Your Symptoms',
+            'Logging daily helps identify patterns and irregularities.',
+            Icons.edit_note_outlined,
+          ),
+          const SizedBox(height: 20),
+          const HawaSectionTitle('Self Care'),
+          const SizedBox(height: 12),
+          _tip(
+            '03',
+            'Gentle Exercise',
+            'Light yoga or walking can alleviate pain and improve mood.',
+            Icons.self_improvement,
+          ),
+          _tip(
+            '04',
+            'Heat Therapy',
+            'A warm patch relaxes uterine muscles and eases discomfort.',
+            Icons.local_fire_department_outlined,
+          ),
+          const SizedBox(height: 20),
+          const HawaSectionTitle('Nutrition'),
+          const SizedBox(height: 12),
+          _tip(
+            '05',
+            'Iron-Rich Foods',
+            'Replenish iron with leafy greens, beans, and lean meats.',
+            Icons.restaurant_outlined,
+          ),
+          _tip(
+            '06',
+            'Limit Caffeine',
+            'Reducing coffee can lower anxiety and breast tenderness.',
+            Icons.coffee_outlined,
+          ),
+          const SizedBox(height: 16),
+          const Center(child: HawaPrivacyBadge()),
+        ],
+      ),
+    );
+  }
+
+  Widget _tip(String number, String title, String description, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: HawaCard(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader("Cycle Health"),
-            const SizedBox(height: 10),
-            _buildTipCard(
-              "Stay Hydrated",
-               "Drinking water helps reduce bloating and cramps during your period.",
-               Icons.water_drop_outlined,
-               Colors.blue
+            Text(
+              number,
+              style: HawaTypography.display(number, size: 28, style: FontStyle.normal)
+                  .copyWith(color: HawaColors.secondary),
             ),
-            _buildTipCard(
-              "Track Your Symptoms",
-              "Logging your symptoms daily helps identify patterns and irregularities.",
-              Icons.edit_note,
-              Colors.purple
-            ),
-             const SizedBox(height: 20),
-            _buildSectionHeader("Self Care"),
-             const SizedBox(height: 10),
-            _buildTipCard(
-              "Gentle Exercise",
-              "Light yoga or walking can alleviate menstrual pain and improve mood.",
-              Icons.self_improvement,
-              Colors.green
-            ),
-             _buildTipCard(
-              "Heat Therapy",
-              "Applying a heat patch or hot water bottle can relax uterine muscles.",
-              Icons.local_fire_department_outlined,
-              Colors.orange
-            ),
-             const SizedBox(height: 20),
-            _buildSectionHeader("Nutrition"),
-            const SizedBox(height: 10),
-            _buildTipCard(
-              "Iron-Rich Foods",
-              "Replenish lost iron with leafy greens, beans, and lean meats.",
-              Icons.restaurant,
-              Colors.red
-            ),
-             _buildTipCard(
-              "Limit Caffeine",
-              "Reducing coffee intake can help lower anxiety and breast tenderness.",
-              Icons.coffee_outlined,
-              Colors.brown
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(icon, size: 18, color: HawaColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(title, style: HawaTypography.body(size: 16, weight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(description, style: HawaTypography.bodySecondary(size: 13)),
+                ],
+              ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: GoogleFonts.poppins(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: const Color(0xFF5C2A6B),
-      ),
-    );
-  }
-
-  Widget _buildTipCard(String title, String description, IconData icon, Color iconColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: iconColor, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

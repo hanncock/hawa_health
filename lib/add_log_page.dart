@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'mock_data.dart'; // Import for Enums
+
+import 'api/hawa_api.dart';
+import 'api/symptom_mapper.dart';
+import 'design/hawa_components.dart';
+import 'design/hawa_design_system.dart';
+import 'mock_data.dart';
+import 'services/session_service.dart';
 
 class AddLogPage extends StatefulWidget {
   const AddLogPage({super.key});
@@ -16,9 +21,12 @@ class _AddLogPageState extends State<AddLogPage> {
   final List<String> _selectedSymptoms = [];
   final TextEditingController _notesController = TextEditingController();
 
-  final List<String> _availableSymptoms = [
-    "Cramps", "Headache", "Bloating", "Fatigue", "Acne", 
-    "Backache", "Nausea", "Insomnia", "Cravings"
+  final _api = HawaApi();
+  final _session = SessionService();
+  bool _saving = false;
+
+  static const _symptoms = [
+    'Cramps', 'Headache', 'Bloating', 'Fatigue', 'Acne',
   ];
 
   @override
@@ -27,212 +35,188 @@ class _AddLogPageState extends State<AddLogPage> {
     super.dispose();
   }
 
-  void _saveLog() {
-    // In a real app, this would save to a database or state management store
-    // For now, we just pop back
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Log saved successfully!')),
-    );
-    Navigator.pop(context);
+  Future<void> _saveLog() async {
+    setState(() => _saving = true);
+    try {
+      final username = await _session.getUsername();
+      if (username == null) throw Exception('Not signed in');
+
+      final cycles = await _api.getCycles(username);
+      if (cycles.cycleRecords.isEmpty) {
+        throw Exception('No cycle found. Complete onboarding first.');
+      }
+
+      final cycleId = cycles.cycleRecords.last.id;
+      final fieldMap = <String, String>{};
+      var headache = false;
+      var acneFlare = false;
+
+      for (final symptom in _selectedSymptoms) {
+        final field = SymptomMapper.symptomToField(symptom);
+        if (field == 'headache') headache = true;
+        if (field == 'acne') acneFlare = true;
+        if (field == 'pain') fieldMap['painLevel'] = 'HIGH';
+        if (field == 'bloating') fieldMap['bloating'] = 'HIGH';
+        if (field == 'fatigue') fieldMap['fatigue'] = 'HIGH';
+      }
+
+      await _api.addSymptom(
+        username,
+        cycleId: cycleId,
+        bleeding: SymptomMapper.flowToBleeding(_selectedFlow),
+        mood: SymptomMapper.moodToIntensity(_selectedMood),
+        fatigue: fieldMap['fatigue'],
+        bloating: fieldMap['bloating'],
+        painLevel: fieldMap['painLevel'],
+        headache: headache,
+        acneFlare: acneFlare,
+        notes: _notesController.text.trim(),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: HawaColors.white, size: 20),
+              const SizedBox(width: 10),
+              Text('Log saved', style: HawaTypography.body(color: HawaColors.white, weight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save log: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: HawaColors.cream,
       appBar: AppBar(
-        title: Text(
-          'Log Daily Health',
-          style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: const Color(0xFF5C2A6B),
-        foregroundColor: Colors.white,
+        title: Text('Log health', style: HawaTypography.body(size: 18, weight: FontWeight.w600)),
         actions: [
           IconButton(
-            onPressed: _saveLog,
-            icon: const Icon(Icons.check),
+            onPressed: _saving ? null : _saveLog,
+            icon: const Icon(Icons.check_rounded),
           ),
         ],
       ),
       body: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date Selector
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-              color: const Color(0xFFF5E9FF),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              color: HawaColors.creamDark,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "${_selectedDate.day} ${_getMonthName(_selectedDate.month)} ${_selectedDate.year}",
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF5C2A6B),
-                    ),
+                    '${_selectedDate.day} ${_month(_selectedDate.month)} ${_selectedDate.year}',
+                    style: HawaTypography.body(size: 17, weight: FontWeight.w700, color: HawaColors.primary),
                   ),
                   IconButton(
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now(),
-                         builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: const ColorScheme.light(
-                                primary: Color(0xFF5C2A6B),
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setState(() => _selectedDate = picked);
-                      }
-                    },
-                    icon: const Icon(Icons.calendar_today, color: Color(0xFF5C2A6B)),
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.calendar_today_outlined, color: HawaColors.primary),
                   ),
                 ],
               ),
             ),
-
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Flow Section
-                  _buildSectionTitle("Menstrual Flow"),
+                  _section('Menstrual Flow'),
                   const SizedBox(height: 10),
                   Wrap(
-                    spacing: 12,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: FlowIntensity.values.map((flow) {
-                      return _buildChoiceChip(
-                        label: flow.name[0].toUpperCase() + flow.name.substring(1),
+                      final label = flow.name[0].toUpperCase() + flow.name.substring(1);
+                      return HawaChip(
+                        label: label,
                         selected: _selectedFlow == flow,
-                        onSelected: (selected) {
-                          setState(() {
-                            _selectedFlow = selected ? flow : null;
-                          });
-                        },
-                        color: Colors.pinkAccent,
+                        onTap: () => setState(() {
+                          _selectedFlow = _selectedFlow == flow ? null : flow;
+                        }),
                       );
                     }).toList(),
                   ),
-                  
-                  const SizedBox(height: 30),
-
-                  // Mood Section
-                  _buildSectionTitle("Mood"),
+                  const SizedBox(height: 28),
+                  _section('Mood'),
                   const SizedBox(height: 10),
                   Wrap(
-                    spacing: 12,
-                    runSpacing: 12, // add vertical spacing
+                    spacing: 8,
+                    runSpacing: 8,
                     children: Mood.values.map((mood) {
-                      return _buildChoiceChip(
-                        label: mood.name[0].toUpperCase() + mood.name.substring(1),
+                      final label = mood.name[0].toUpperCase() + mood.name.substring(1);
+                      return HawaChip(
+                        label: label,
                         selected: _selectedMood == mood,
-                        onSelected: (selected) {
-                          setState(() {
-                            _selectedMood = selected ? mood : null;
-                          });
-                        },
-                         color: Colors.purpleAccent,
+                        onTap: () => setState(() {
+                          _selectedMood = _selectedMood == mood ? null : mood;
+                        }),
                       );
                     }).toList(),
                   ),
-
-                  const SizedBox(height: 30),
-
-                  // Symptoms Section
-                  _buildSectionTitle("Symptoms"),
-                   const SizedBox(height: 10),
+                  const SizedBox(height: 28),
+                  _section('Symptoms'),
+                  const SizedBox(height: 10),
                   Wrap(
-                    spacing: 12,
-                     runSpacing: 12,
-                    children: _availableSymptoms.map((symptom) {
-                      final isSelected = _selectedSymptoms.contains(symptom);
-                      return FilterChip(
-                        label: Text(symptom),
-                        labelStyle: GoogleFonts.poppins(
-                          color: isSelected ? Colors.white : Colors.black87,
-                          fontSize: 14,
-                        ),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              _selectedSymptoms.add(symptom);
-                            } else {
-                              _selectedSymptoms.remove(symptom);
-                            }
-                          });
-                        },
-                        backgroundColor: Colors.white,
-                        selectedColor: const Color(0xFF5C2A6B),
-                        checkmarkColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: isSelected ? const Color(0xFF5C2A6B) : Colors.grey[400]!,
-                          ),
-                        ),
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _symptoms.map((symptom) {
+                      final selected = _selectedSymptoms.contains(symptom);
+                      return HawaChip(
+                        label: symptom,
+                        selected: selected,
+                        onTap: () => setState(() {
+                          if (selected) {
+                            _selectedSymptoms.remove(symptom);
+                          } else {
+                            _selectedSymptoms.add(symptom);
+                          }
+                        }),
                       );
                     }).toList(),
                   ),
-
-                  const SizedBox(height: 30),
-
-                  // Notes Section
-                  _buildSectionTitle("Notes"),
-                   const SizedBox(height: 10),
+                  const SizedBox(height: 28),
+                  _section('Notes'),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _notesController,
                     maxLines: 4,
+                    style: HawaTypography.body(size: 15),
                     decoration: InputDecoration(
-                      hintText: "Add any additional notes here...",
-                      hintStyle: GoogleFonts.poppins(color: Colors.grey),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF5C2A6B)),
+                      hintText: 'Anything else to note today?',
+                      hintStyle: HawaTypography.body(color: HawaColors.ink60),
+                      filled: true,
+                      fillColor: HawaColors.white,
+                      border: UnderlineInputBorder(borderSide: BorderSide(color: HawaColors.ink12)),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: HawaColors.ink12)),
+                      focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: HawaColors.primary, width: 2),
                       ),
                     ),
                   ),
-                  
-                   const SizedBox(height: 40),
-                   
-                   SizedBox(
-                     width: double.infinity,
-                     height: 50,
-                     child: ElevatedButton(
-                       onPressed: _saveLog,
-                       style: ElevatedButton.styleFrom(
-                         backgroundColor: const Color(0xFF5C2A6B),
-                         shape: RoundedRectangleBorder(
-                           borderRadius: BorderRadius.circular(12),
-                         ),
-                       ),
-                       child: Text(
-                         "Save Log",
-                         style: GoogleFonts.poppins(
-                           fontSize: 16,
-                           fontWeight: FontWeight.w600,
-                           color: Colors.white,
-                         ),
-                       ),
-                     ),
-                   ),
+                  const SizedBox(height: 36),
+                  HawaPrimaryButton(
+                    label: _saving ? 'Saving…' : 'Save log',
+                    enabled: !_saving,
+                    onPressed: _saveLog,
+                  ),
+                  const SizedBox(height: 16),
+                  const Center(child: HawaPrivacyBadge()),
                 ],
               ),
             ),
@@ -242,47 +226,23 @@ class _AddLogPageState extends State<AddLogPage> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: GoogleFonts.poppins(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Colors.black87,
-      ),
-    );
+  Widget _section(String title) {
+    return Text(title, style: HawaTypography.body(size: 17, weight: FontWeight.w700));
   }
 
-  Widget _buildChoiceChip({
-    required String label,
-    required bool selected,
-    required Function(bool) onSelected,
-    required Color color,
-  }) {
-    return ChoiceChip(
-      label: Text(label),
-      labelStyle: GoogleFonts.poppins(
-        color: selected ? Colors.white : Colors.black87,
-        fontSize: 14,
-      ),
-      selected: selected,
-      onSelected: onSelected,
-      backgroundColor: Colors.white,
-      selectedColor: color,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-          color: selected ? color : Colors.grey[400]!,
-        ),
-      ),
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      builder: (context, child) => Theme(data: buildHawaTheme(), child: child!),
     );
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  String _getMonthName(int month) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return months[month - 1];
+  String _month(int m) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[m - 1];
   }
 }
